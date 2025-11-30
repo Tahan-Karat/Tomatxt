@@ -99,18 +99,6 @@ pub fn format_time(seconds: u32) -> String {
     format!("{:02}:{:02}", minutes, secs)
 }
 
-pub fn timer_info(state: &PomodoroState) -> String {
-    let mode = if state.is_break { "BREAK" } else { "WORK" };
-    let status = if state.is_paused { "PAUSED" } else { "RUNNING" };
-    
-    format!(
-        "[{}] {} | {}",
-        mode,
-        status,
-        format_time(state.remaining)  
-    )
-}
-
 #[tauri::command]
 pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
     let new_state = PomodoroState {
