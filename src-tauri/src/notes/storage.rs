@@ -148,39 +148,51 @@ fn find_nested_section(content: &str) -> (String, Option<String>) {
 }
 
 fn parse_nested_notes(children_str: &str, parent_id: &str) -> Result<Vec<Note>, String> {
-    let mut children = Vec::new();
-    let mut current = children_str;
+    fn parse_recursive(content: &str, parent_id: &str) -> Result<Vec<Note>, String> {
+        if let Some(pos) = content.find("---\n") {
+            let child_section = &content[pos + 4..];
 
-    while let Some(pos) = current.find("---\n") {
-        let child_section = &current[pos + 4..];
+            if let Some(end_pos) = child_section.find("\n---\n") {
+                let child_full = &child_section[..end_pos];
+                let child_content = format!("---\n{}---\n", child_full);
 
-        if let Some(end_pos) = child_section.find("\n---\n") {
-            let child_full = &child_section[..end_pos];
-            if let Ok(child) = parse_note_file(
-                &format!("---\n{}---\n", child_full),
-                Some(parent_id.to_string()),
-            ) {
-                children.push(child);
+                match parse_note_file(&child_content, Some(parent_id.to_string())) {
+                    Ok(child) => {
+                        let remaining = &child_section[end_pos..];
+                        let mut result = vec![child];
+                        result.extend(parse_recursive(remaining, parent_id)?);
+                        Ok(result)
+                    }
+                    Err(_e) => {
+                        // If there's an error parsing this child, continue with remaining
+                        parse_recursive(&child_section[end_pos..], parent_id)
+                    }
+                }
+            } else {
+                // No more "---\n---" patterns found, but we have remaining content
+                match parse_note_file(
+                    &format!("---\n{}---\n", child_section),
+                    Some(parent_id.to_string()),
+                ) {
+                    Ok(child) => Ok(vec![child]),
+                    Err(_) => Ok(vec![]), // Return empty vec if parsing fails
+                }
             }
-            current = &child_section[end_pos..];
         } else {
-            if let Ok(child) = parse_note_file(
-                &format!("---\n{}---\n", child_section),
-                Some(parent_id.to_string()),
-            ) {
-                children.push(child);
-            }
-            break;
+            // No more "---\n" found, return empty vector
+            Ok(vec![])
         }
     }
 
-    Ok(children)
+    parse_recursive(children_str, parent_id)
 }
 
-fn compose_note(mut note: Note, content: String, children: Vec<Note>) -> Note {
-    note.content = content;
-    note.children = children;
-    note
+fn compose_note(note: Note, content: String, children: Vec<Note>) -> Note {
+    Note {
+        content,
+        children,
+        ..note
+    }
 }
 
 pub fn parse_note_file(content: &str, parent_id: Option<String>) -> Result<Note, String> {
