@@ -1,6 +1,8 @@
 use tauri::State;
+use std::sync::Mutex;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone)] 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PomodoroState {
     pub work_duration: u32,
     pub break_duration: u32,
@@ -9,38 +11,41 @@ pub struct PomodoroState {
     pub is_paused: bool,
 }
 
-pub fn to_second(minutes:u32) -> u32 {
-    minutes * 60;
+pub struct TimerState {
+    pub timer: Mutex<PomodoroState>,
+}
+
+pub fn to_seconds(minutes: u32) -> u32 { 
+    minutes * 60
 }
 
 pub fn start_break_timer(state: &PomodoroState) -> PomodoroState {
     PomodoroState {
-        is_break: true,                                   
-        remaining: create_break_time(state.break_duration), 
+        is_break: true,
+        remaining: state.break_duration, 
         is_paused: false,
-        ..state                             
+        ..state.clone()
     }
 }
 
 pub fn tick(state: PomodoroState) -> PomodoroState {
     if state.is_paused || state.remaining == 0 {
-        return state; 
+        return state;
     }
-
     PomodoroState {
         remaining: state.remaining - 1,
         ..state
     }
 }
 
-pub fn handle_pause_timer(state: PomodoroState) -> PomodoroState {
+pub fn pause(state: PomodoroState) -> PomodoroState {
     PomodoroState {
         is_paused: true,
         ..state
     }
 }
 
-pub fn handle_resume_timer(state: PomodoroState) -> PomodoroState {
+pub fn resume(state: PomodoroState) -> PomodoroState {
     PomodoroState {
         is_paused: false,
         ..state
@@ -49,10 +54,11 @@ pub fn handle_resume_timer(state: PomodoroState) -> PomodoroState {
 
 pub fn reset(state: PomodoroState) -> PomodoroState {
     let reset_seconds = if state.is_break {
-        to_seconds(state.break_duration)
+        state.break_duration
     } else {
-        to_seconds(state.work_duration)
+        state.work_duration
     };
+
     
     PomodoroState {
         remaining: reset_seconds,
@@ -65,44 +71,34 @@ pub fn is_finished(state: &PomodoroState) -> bool {
     state.remaining == 0
 }
 
-/// Pure: Apakah timer sedang berjalan?
 pub fn is_running(state: &PomodoroState) -> bool {
     !state.is_paused && state.remaining > 0
 }
 
-/// Pure: Apakah sedang break time?
 pub fn is_break_time(state: &PomodoroState) -> bool {
     state.is_break
 }
 
-/// Pure: Apakah sedang work time?
+// auto ganti ke break tim
 pub fn is_work_time(state: &PomodoroState) -> bool {
     !state.is_break
 }
 
-/// Pure: Apakah break time selesai? (perlu switch ke work)
+// auto pindah ke tab focus time
 pub fn is_break_finished(state: &PomodoroState) -> bool {
     state.is_break && is_finished(state)
 }
 
-/// Pure: Apakah work time selesai? (perlu switch ke break)
 pub fn is_work_finished(state: &PomodoroState) -> bool {
     !state.is_break && is_finished(state)
 }
 
 pub fn format_time(seconds: u32) -> String {
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
+    let minutes = seconds / 60;
     let secs = seconds % 60;
-    
-    if hours > 0 {
-        format!("{:02}:{:02}:{:02}", hours, minutes, secs)
-    } else {
-        format!("{:02}:{:02}", minutes, secs)
-    }
+    format!("{:02}:{:02}", minutes, secs)
 }
 
-/// Pure: Get timer info sebagai string
 pub fn timer_info(state: &PomodoroState) -> String {
     let mode = if state.is_break { "BREAK" } else { "WORK" };
     let status = if state.is_paused { "PAUSED" } else { "RUNNING" };
@@ -111,6 +107,97 @@ pub fn timer_info(state: &PomodoroState) -> String {
         "[{}] {} | {}",
         mode,
         status,
-        format_time(state.remaining_seconds)
+        format_time(state.remaining)  
     )
+}
+
+#[tauri::command]
+pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
+    let new_state = PomodoroState {
+        work_duration: to_seconds(work_min),
+        break_duration: to_seconds(break_min),
+        remaining: to_seconds(work_min),
+        is_break: false,
+        is_paused: false,
+    };
+    
+    let mut timer = state.timer.lock().unwrap();
+    *timer = new_state.clone();
+    new_state
+}
+
+#[tauri::command]
+pub fn get_timer_state(state: State<TimerState>) -> PomodoroState {
+    state.timer.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn start_break(state: State<TimerState>) -> String {
+    let mut timer = state.timer.lock().unwrap();
+    *timer = start_break_timer(&timer);
+    format_time(timer.remaining)
+}
+
+#[tauri::command]
+pub fn tick_timer(state: State<TimerState>) -> String {
+    let mut timer = state.timer.lock().unwrap();
+    *timer = tick(timer.clone());
+    format_time(timer.remaining)
+}
+
+#[tauri::command]
+pub fn pause_timer(state: State<TimerState>) -> bool {
+    let mut timer = state.timer.lock().unwrap();
+    *timer = pause(timer.clone());
+    timer.is_paused
+}
+
+#[tauri::command]
+pub fn resume_timer(state: State<TimerState>) -> bool {
+    let mut timer = state.timer.lock().unwrap();
+    *timer = resume(timer.clone());
+    timer.is_paused
+}
+
+#[tauri::command]
+pub fn reset_timer(state: State<TimerState>) -> String {
+    let mut timer = state.timer.lock().unwrap();
+    *timer = reset(timer.clone());
+    format_time(timer.remaining)
+}
+
+#[tauri::command]
+pub fn is_timer_finished(state: State<TimerState>) -> bool {
+    let timer = state.timer.lock().unwrap();
+    is_finished(&timer)
+}
+
+// #[tauri::command]
+// pub fn check_work_finished(state: State<TimerState>) -> bool {
+//     let timer = state.timer.lock().unwrap();
+//     is_work_finished(&timer)
+// }
+
+#[tauri::command]
+pub fn check_break_finished(state: State<TimerState>) -> bool {
+    let timer = state.timer.lock().unwrap();
+    is_break_finished(&timer)
+}
+
+#[tauri::command]
+pub fn update_break_duration(state: State<TimerState>, minutes: u32) -> PomodoroState {
+    let mut timer = state.timer.lock().unwrap();
+    let new_duration = to_seconds(minutes);
+    
+    *timer = PomodoroState {
+        break_duration: new_duration,
+        remaining: if timer.is_break {
+            new_duration  // Update remaining kalau lagi break
+        } else {
+            timer.remaining
+        },
+        ..timer.clone()
+    };
+    
+    timer.clone()
 }
