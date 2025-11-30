@@ -1,27 +1,21 @@
 const { invoke } = window.__TAURI__.core;
 
-// Application state
 let currentNote = null;
-
-// Available note card colors
+let timerInterval = null;
+let currentState = null;
 const noteColors = ['blue', 'lilac', 'mint', 'cream', 'pink', 'sand'];
 
-// Get a random note color
 function getRandomNoteColor() {
         return noteColors[Math.floor(Math.random() * noteColors.length)];
 }
 
-// Wait for Tauri to be ready
+
+
 async function initApp() {
         try {
-                // Load all notes from the backend
                 await loadAllNotes();
-
-                // Setup event listeners
+                await initTimer();
                 setupEventListeners();
-
-                // Initialize Pomodoro when the DOM is loaded
-                initializePomodoro();
         } catch (error) {
                 console.error('Failed to initialize app:', error);
                 showNotification('Failed to initialize app', 'error');
@@ -29,9 +23,9 @@ async function initApp() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-        // Small delay to ensure Tauri is ready
         setTimeout(initApp, 100);
 });
+
 
 function setupEventListeners() {
         // Add new note button
@@ -51,24 +45,14 @@ function setupEventListeners() {
                 editBtn.addEventListener('click', toggleNoteEdit);
         }
 
-        // Convert checkboxes to subnotes button
-        const convertBtn = document.getElementById('convert-checkboxes-btn');
-        if (convertBtn) {
-                convertBtn.addEventListener('click', async () => {
-                        if (currentNote) {
-                                await createSubnotesFromCheckboxes(currentNote.id, currentNote.content);
-                        }
-                });
-        }
-
-        // Subnote form submission - use event delegation
+        // Subnote form submission
         document.addEventListener('submit', function (event) {
                 if (event.target.id === 'subnote-form') {
                         addSubnote(event);
                 }
         });
 
-        // Note card clicks - use event delegation
+        // Note card clicks
         document.addEventListener('click', function (event) {
                 const noteCard = event.target.closest('.note-card');
                 if (noteCard && !event.target.closest('.note-menu-btn') && !event.target.closest('.note-menu')) {
@@ -80,11 +64,54 @@ function setupEventListeners() {
                         }
                 }
         });
+
+        // Close menus when clicking elsewhere
+        document.addEventListener('click', (event) => {
+                if (!event.target.closest('.note-menu') && !event.target.closest('.note-menu-btn')) {
+                        document.querySelectorAll('.note-card.has-open-menu').forEach(card => {
+                                card.classList.remove('has-open-menu');
+                        });
+                }
+        });
+
+        // Close note detail with Escape
+        document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape') {
+                        const noteDetail = document.querySelector('.note-detail');
+                        if (noteDetail && noteDetail.getAttribute('aria-hidden') === 'false') {
+                                closeNoteDetail();
+                        }
+                }
+        });
+
+        // === POMODORO EVENT LISTENERS ===
+        const playBtn = document.querySelector('.btn-circle--primary');
+        const resetBtn = document.querySelector('.btn-circle--ghost');
+        const settingsBtn = document.querySelector('.pomodoro__settings-btn');
+        const settingsForm = document.getElementById('pomodoro-settings');
+        const workTab = document.querySelector('[data-timer-tab="work"]');
+        const breakTab = document.querySelector('[data-timer-tab="break"]');
+
+        if (playBtn) playBtn.addEventListener('click', toggleTimer);
+        if (resetBtn) resetBtn.addEventListener('click', handleReset);
+        if (settingsBtn) settingsBtn.addEventListener('click', toggleSettings);
+        if (settingsForm) settingsForm.addEventListener('submit', handleSettingsSubmit);
+        if (workTab) workTab.addEventListener('click', () => switchTab('work'));
+        if (breakTab) breakTab.addEventListener('click', () => switchTab('break'));
+
+        // Volume slider
+        const volumeSlider = document.getElementById('alarm-volume');
+        const volumeValue = document.getElementById('alarm-volume-value');
+        if (volumeSlider && volumeValue) {
+                volumeSlider.addEventListener('input', (e) => {
+                        volumeValue.textContent = e.target.value;
+                });
+        }
 }
+
 
 async function loadAllNotes() {
         try {
-                // Load all notes from the backend
                 const notes = await invoke('get_notes');
                 renderNotes(notes);
         } catch (error) {
@@ -97,10 +124,8 @@ async function renderNotes(notes) {
         const notesGrid = document.querySelector('.notes-grid');
         if (!notesGrid) return;
 
-        // Clear existing notes
         notesGrid.innerHTML = '';
 
-        // Add each note to the grid
         for (const note of notes) {
                 const noteElement = await createNoteElement(note);
                 notesGrid.appendChild(noteElement);
@@ -118,35 +143,30 @@ async function createNoteElement(note) {
         }
 
         article.innerHTML = `
-    <button type="button" class="note-menu-btn" aria-label="Opsi catatan">
-        ⋮
-    </button>
+        <button type="button" class="note-menu-btn" aria-label="Opsi catatan">⋮</button>
+        <div class="note-menu">
+            <button type="button" class="note-menu__item" data-action="download">
+                <span class="note-menu__icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M3 19H21V21H3V19ZM13 9H20L12 17L4 9H11V1H13V9Z"></path>
+                    </svg>
+                </span>
+                <span>Unduh</span>
+            </button>
+            <button type="button" class="note-menu__item note-menu__item--danger" data-action="delete">
+                <span class="note-menu__icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M17 6H22V8H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V8H2V6H7V3C7 2.44772 7.44772 2 8 2H16C16.5523 2 17 2.44772 17 3V6ZM9 11V17H11V11H9ZM13 11V17H15V11H13ZM9 4V6H15V4H9Z"></path>
+                    </svg>
+                </span>
+                <span>Hapus</span>
+            </button>
+        </div>
+        <h2>${escapeHtml(note.title)}</h2>
+        <p>${escapeHtml(note.content_preview)}</p>
+        ${childCountHtml}
+    `;
 
-    <div class="note-menu">
-        <button type="button" class="note-menu__item" data-action="download">
-            <span class="note-menu__icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M3 19H21V21H3V19ZM13 9H20L12 17L4 9H11V1H13V9Z"></path>
-                </svg>
-            </span>
-            <span>Unduh</span>
-        </button>
-        <button type="button" class="note-menu__item note-menu__item--danger" data-action="delete">
-            <span class="note-menu__icon">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M17 6H22V8H20V21C20 21.5523 19.5523 22 19 22H5C4.44772 22 4 21.5523 4 21V8H2V6H7V3C7 2.44772 7.44772 2 8 2H16C16.5523 2 17 2.44772 17 3V6ZM9 11V17H11V11H9ZM13 11V17H15V11H13ZM9 4V6H15V4H9Z"></path>
-                </svg>
-            </span>
-            <span>Hapus</span>
-        </button>
-    </div>
-
-    <h2>${escapeHtml(note.title)}</h2>
-    <p>${escapeHtml(note.content_preview)}</p>
-    ${childCountHtml}
-`;
-
-        // Add menu button functionality
         const menuBtn = article.querySelector('.note-menu-btn');
         if (menuBtn) {
                 menuBtn.addEventListener('click', function (e) {
@@ -155,7 +175,6 @@ async function createNoteElement(note) {
                 });
         }
 
-        // Add delete functionality
         const deleteBtn = article.querySelector('[data-action="delete"]');
         if (deleteBtn) {
                 deleteBtn.addEventListener('click', async (e) => {
@@ -169,16 +188,12 @@ async function createNoteElement(note) {
 
 async function createNote() {
         try {
-                // Create a new note with default content
                 const newNote = await invoke('create_note', {
                         title: 'New Note',
                         content: 'Start writing your note here...'
                 });
 
-                // Reload all notes to include the new one
                 await loadAllNotes();
-
-                // Open the new note in detail view
                 openNoteDetail(newNote.id).catch(error => {
                         console.error('Error opening new note detail:', error);
                 });
@@ -193,28 +208,23 @@ async function openNoteDetail(noteId) {
                 const note = await invoke('get_note', { id: noteId });
                 currentNote = note;
 
-                // Populate the detail modal
                 document.getElementById('detail-title').textContent = note.title;
                 document.getElementById('detail-description').textContent = note.content;
                 document.getElementById('detail-title-input').value = note.title;
                 document.getElementById('detail-description-input').value = note.content;
 
-                // Clear subnotes and recreate from note content
                 const subnoteList = document.getElementById('subnote-list');
                 if (subnoteList) {
                         subnoteList.innerHTML = '';
                 }
 
-                // Parse and display checkboxes from the note content
                 await createSubnotesFromCheckboxes(noteId, note.content);
 
-                // Show the detail modal
                 const noteDetail = document.querySelector('.note-detail');
                 noteDetail.classList.add('is-active');
                 noteDetail.setAttribute('aria-hidden', 'false');
                 noteDetail.style.display = 'block';
 
-                // Reset to view mode
                 toggleEditState(false);
         } catch (error) {
                 console.error('Failed to open note detail:', error);
@@ -228,7 +238,6 @@ function closeNoteDetail() {
         noteDetail.setAttribute('aria-hidden', 'true');
         noteDetail.style.display = 'none';
 
-        // Clear subnotes
         const subnoteList = document.getElementById('subnote-list');
         if (subnoteList) {
                 subnoteList.innerHTML = '';
@@ -285,14 +294,12 @@ async function saveCurrentNote() {
 
                 currentNote = updatedNote;
 
-                // Update the note in the grid view
                 const noteElement = document.querySelector(`[data-note-id="${currentNote.id}"]`);
                 if (noteElement) {
                         noteElement.querySelector('h2').textContent = updatedNote.title;
                         noteElement.querySelector('p').textContent = updatedNote.content;
                 }
 
-                // Update detail view
                 document.getElementById('detail-title').textContent = updatedNote.title;
                 document.getElementById('detail-description').textContent = updatedNote.content;
 
@@ -311,11 +318,8 @@ async function deleteNote(noteId) {
 
         try {
                 await invoke('delete_note', { id: noteId });
-
-                // Reload notes to reflect the deletion
                 await loadAllNotes();
 
-                // Close detail view if the deleted note was open
                 if (currentNote && currentNote.id === noteId) {
                         closeNoteDetail();
                 }
@@ -337,102 +341,31 @@ async function addSubnote(event) {
 
         if (!subnoteText) return;
 
-        // Clear input immediately for user feedback
         input.value = '';
 
         try {
-                // Add checkbox to current note content
                 const newCheckbox = `- [ ] ${subnoteText}`;
                 const updatedContent = currentNote.content
                         ? currentNote.content + '\n' + newCheckbox
                         : newCheckbox;
 
-                // Update the note with new checkbox
                 const updatedNote = await invoke('update_note', {
                         id: currentNote.id,
                         title: currentNote.title,
                         content: updatedContent
                 });
 
-                // Update current note reference
                 currentNote = updatedNote;
 
-                // Update the detail view
                 document.getElementById('detail-description').textContent = updatedNote.content;
                 document.getElementById('detail-description-input').value = updatedNote.content;
 
-                // Parse checkboxes and update display
                 await createSubnotesFromCheckboxes(currentNote.id, updatedNote.content);
 
                 showNotification('Subnote added successfully', 'success');
         } catch (error) {
                 console.error('Failed to add subnote:', error);
                 showNotification('Failed to add subnote', 'error');
-        }
-}
-
-async function updateSubnotesList(parentId) {
-        try {
-                // Get child notes for this parent
-                const childNotes = await invoke('get_child_notes', { parentId: parentId });
-
-                // Render the child notes in the subnote list
-                const subnoteList = document.getElementById('subnote-list');
-                if (!subnoteList) return;
-
-                // Clear existing subnotes
-                subnoteList.innerHTML = '';
-
-                // Add each child note to the list
-                childNotes.forEach((childNote, index) => {
-                        const li = document.createElement('li');
-                        li.className = `subnote-item${childNote.is_done ? " subnote-item--done" : ""}`;
-                        li.dataset.index = index;
-                        li.innerHTML = `
-        <input
-            type="checkbox"
-            id="subnote-${index}"
-            ${childNote.is_done ? "checked" : ""}
-        />
-        <label for="subnote-${index}">${escapeHtml(childNote.title)}</label>
-
-    `;
-
-                        // Add event listener for checkbox change
-                        const checkbox = li.querySelector('input[type="checkbox"]');
-                        if (checkbox) {
-                                checkbox.addEventListener('change', async (event) => {
-                                        try {
-                                                await invoke('update_note_status', {
-                                                        id: childNote.id,
-                                                        isDone: event.target.checked
-                                                });
-
-                                                li.classList.toggle("subnote-item--done", event.target.checked);
-                                        } catch (error) {
-                                                console.error('Error updating subnote status:', error);
-                                        }
-                                });
-                        }
-
-                        // Add event listener to edit button
-                        const deleteBtn = li.querySelector('.subnote-delete-btn');
-                        if (deleteBtn) {
-                                deleteBtn.addEventListener('click', async (e) => {
-                                        e.stopPropagation();
-                                        await deleteNote(childNote.id);
-                                        await updateSubnotesList(parentId);
-                                });
-                        }
-
-                        subnoteList.appendChild(li);
-                });
-
-                if (childNotes.length === 0) {
-                        subnoteList.innerHTML = '<li class="no-subnotes">No subnotes yet</li>';
-                }
-        } catch (error) {
-                console.error('Failed to update subnotes list:', error);
         }
 }
 
@@ -449,10 +382,8 @@ async function createSubnotesFromCheckboxes(parentId, content) {
                 }
 
                 renderCheckboxes(parentId, checkboxes);
-                showNotification('Subnotes created from checkboxes', 'success');
         } catch (error) {
                 console.error('Failed to create subnotes from checkboxes:', error);
-                showNotification('Failed to create subnotes from checkboxes', 'error');
         }
 }
 
@@ -466,13 +397,9 @@ function renderCheckboxes(parentId, checkboxes) {
                 const li = document.createElement('li');
                 li.className = `subnote-item${checkbox.completed ? " subnote-item--done" : ""}`;
                 li.innerHTML = `
-        <input
-            type="checkbox"
-            id="subnote-${index}"
-            ${checkbox.completed ? "checked" : ""}
-        />
-        <label for="subnote-${index}">${escapeHtml(checkbox.text)}</label>
-     `;
+            <input type="checkbox" id="subnote-${index}" ${checkbox.completed ? "checked" : ""} />
+            <label for="subnote-${index}">${escapeHtml(checkbox.text)}</label>
+        `;
 
                 const checkboxElement = li.querySelector('input[type="checkbox"]');
                 if (checkboxElement) {
@@ -501,56 +428,185 @@ function renderCheckboxes(parentId, checkboxes) {
 function toggleNoteMenu(event) {
         event.stopPropagation();
 
-        // Close any open menus first
         document.querySelectorAll('.note-card').forEach(card => {
                 if (card !== event.target.closest('.note-card')) {
                         card.classList.remove('has-open-menu');
                 }
         });
 
-        // Toggle the current menu
         const noteCard = event.target.closest('.note-card');
         if (noteCard) {
                 noteCard.classList.toggle('has-open-menu');
         }
 }
 
-// Close menus when clicking elsewhere
-document.addEventListener('click', (event) => {
-        if (!event.target.closest('.note-menu') && !event.target.closest('.note-menu-btn')) {
-                document.querySelectorAll('.note-card.has-open-menu').forEach(card => {
-                        card.classList.remove('has-open-menu');
-                });
-        }
-});
 
-// Close note detail with Escape key
-document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-                const noteDetail = document.querySelector('.note-detail');
-                if (noteDetail && noteDetail.getAttribute('aria-hidden') === 'false') {
-                        closeNoteDetail();
-                }
-        }
-});
-
-
-function savePomodoroSettings(e) {
-        if (e) {
-                e.preventDefault();
-        }
-
-        const workDurationInput = document.getElementById('work-duration');
-        const breakDurationInput = document.getElementById('break-duration');
-
-
+async function initTimer() {
+        currentState = await invoke('get_timer_state');
+        updateDisplay();
 }
 
-function updatePomodoroForNote(note) {
-        if (note && note.pomodoro_count !== undefined) {
-                console.log(`Note has ${note.pomodoro_count} pomodoro sessions`);
+function updateDisplay() {
+        if (!currentState) return;
+
+        const pomodoroTime = document.getElementById('pomodoro-time');
+        const pomodoroContainer = document.querySelector('.pomodoro');
+        const workTab = document.querySelector('[data-timer-tab="work"]');
+        const breakTab = document.querySelector('[data-timer-tab="break"]');
+
+        if (!pomodoroTime) return;
+
+        const time = formatTime(currentState.remaining);
+        pomodoroTime.textContent = time;
+
+        if (currentState.is_break) {
+                pomodoroContainer.classList.remove('pomodoro--work');
+                pomodoroContainer.classList.add('pomodoro--break');
+                breakTab.classList.add('is-active');
+                workTab.classList.remove('is-active');
+        } else {
+                pomodoroContainer.classList.remove('pomodoro--break');
+                pomodoroContainer.classList.add('pomodoro--work');
+                workTab.classList.add('is-active');
+                breakTab.classList.remove('is-active');
         }
-        initializePomodoro();
+
+        updatePlayButton();
+}
+
+function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function updatePlayButton() {
+        if (!currentState) return;
+
+        const playBtn = document.querySelector('.btn-circle--primary');
+        if (!playBtn) return;
+
+        const isRunning = !currentState.is_paused && currentState.remaining > 0;
+
+        if (isRunning) {
+                playBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M6 5H8V19H6V5ZM16 5H18V19H16V5Z"></path>
+            </svg>
+        `;
+        } else {
+                playBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M19.376 12.4161L8.77735 19.4818C8.54759 19.635 8.23715 19.5729 8.08397 19.3432C8.02922 19.261 8 19.1645 8 19.0658V4.93433C8 4.65818 8.22386 4.43433 8.5 4.43433C8.59871 4.43433 8.69522 4.46355 8.77735 4.5183L19.376 11.584C19.6057 11.7372 19.6678 12.0477 19.5146 12.2774C19.478 12.3323 19.4309 12.3795 19.376 12.4161Z"></path>
+            </svg>
+        `;
+        }
+}
+
+async function toggleTimer() {
+        if (!currentState) return;
+
+        if (currentState.is_paused) {
+                await invoke('resume_timer');
+                currentState.is_paused = false;
+                startTicking();
+        } else {
+                await invoke('pause_timer');
+                currentState.is_paused = true;
+                stopTicking();
+        }
+
+        updatePlayButton();
+}
+
+function startTicking() {
+        if (timerInterval) return;
+
+        timerInterval = setInterval(async () => {
+                const timeStr = await invoke('tick_timer');
+                currentState = await invoke('get_timer_state');
+                const pomodoroTime = document.getElementById('pomodoro-time');
+                if (pomodoroTime) {
+                        pomodoroTime.textContent = timeStr;
+                }
+
+                if (currentState.remaining === 0) {
+                        stopTicking();
+
+                        if (!currentState.is_break) {
+                                if (confirm('Work time selesai! Mulai break?')) {
+                                        await invoke('start_break');
+                                        currentState = await invoke('get_timer_state');
+                                        updateDisplay();
+                                        switchTab("work");
+                                }
+                        } else {
+                                alert('Break time selesai!')
+                                await invoke('reset_timer');
+                                currentState = await invoke('get_timer_state');
+                                updateDisplay();
+                        }
+                }
+        }, 1000);
+}
+
+function stopTicking() {
+        if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+        }
+}
+
+async function handleReset() {
+        stopTicking();
+        const timeStr = await invoke('reset_timer');
+        currentState = await invoke('get_timer_state');
+        const pomodoroTime = document.getElementById('pomodoro-time');
+        if (pomodoroTime) {
+                pomodoroTime.textContent = timeStr;
+        }
+        updatePlayButton();
+}
+
+function toggleSettings() {
+        const settingsForm = document.getElementById('pomodoro-settings');
+        if (!settingsForm) return;
+
+        settingsForm.classList.toggle('is-open');
+        settingsForm.setAttribute(
+                'aria-hidden',
+                !settingsForm.classList.contains('is-open')
+        );
+}
+
+async function handleSettingsSubmit(e) {
+        e.preventDefault();
+
+        const workMin = parseInt(document.getElementById('work-duration').value);
+        const breakMin = parseInt(document.getElementById('break-duration').value);
+
+        stopTicking();
+
+        currentState = await invoke('init_timer', {
+                workMin,
+                breakMin
+        });
+
+        updateDisplay();
+        toggleSettings();
+}
+
+async function switchTab(mode) {
+        stopTicking();
+
+        if (mode === 'break' && !currentState.is_break) {
+                await invoke('start_break');
+        } else if (mode === 'work' && currentState.is_break) {
+                await invoke('reset_timer');
+        }
+
+        currentState = await invoke('get_timer_state');
+        updateDisplay();
 }
 
 function showNotification(message, type) {
