@@ -223,7 +223,6 @@ async function openNoteDetail(noteId) {
                 const noteDetail = document.querySelector('.note-detail');
                 noteDetail.classList.add('is-active');
                 noteDetail.setAttribute('aria-hidden', 'false');
-                noteDetail.style.display = 'block';
 
                 toggleEditState(false);
         } catch (error) {
@@ -236,7 +235,6 @@ function closeNoteDetail() {
         const noteDetail = document.querySelector('.note-detail');
         noteDetail.classList.remove('is-active');
         noteDetail.setAttribute('aria-hidden', 'true');
-        noteDetail.style.display = 'none';
 
         const subnoteList = document.getElementById('subnote-list');
         if (subnoteList) {
