@@ -1,4 +1,5 @@
 use super::model::Note;
+use rayon::prelude::*;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -18,111 +19,258 @@ fn get_notes_dir() -> Result<PathBuf, String> {
 }
 
 fn get_note_path(id: &str) -> Result<PathBuf, String> {
-    let notes_dir = get_notes_dir()?;
-    Ok(notes_dir.join(format!("{}.md", id)))
+    get_notes_dir().map(|dir| dir.join(format!("{}.md", id)))
 }
 
-pub fn save_note(note: &Note) -> Result<(), String> {
-    let path = get_note_path(&note.id)?;
+fn extract_field(metadata: &str, key: &str) -> Option<String> {
+    metadata
+        .lines()
+        .find(|line| line.trim().starts_with(key))
+        .and_then(|line| line.split_once(':'))
+        .map(|(_, val)| val.trim().to_string())
+}
 
-    let parent_line = match &note.parent_id {
-        Some(pid) => format!("parent_id: {}\n", pid),
-        None => String::new(),
+fn build_frontmatter(note: &Note) -> String {
+    vec![
+        format!("id: {}", note.id),
+        format!("is_task: {}", note.is_task),
+        format!("is_done: {}", note.is_done),
+        format!("pomodoro_count: {}", note.pomodoro_count),
+        format!("title: {}", note.title),
+        format!("created_at: {}", note.created_at),
+        format!("updated_at: {}", note.updated_at),
+    ]
+    .join("\n")
+}
+
+fn serialize_child_note(child: &Note, indent: usize) -> String {
+    let prefix = " ".repeat(indent);
+    let indented_content = if child.content.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n{}{}",
+            prefix,
+            child.content.replace('\n', &format!("\n{}", prefix))
+        )
     };
 
-    let content = format!(
-        "---\nid: {}\n{}is_task: {}\nis_done: {}\npomodoro_count: {}\ntitle: {}\ncreated_at: {}\nupdated_at: {}\n---\n\n{}",
-        note.id,
-        parent_line,
-        note.is_task,
-        note.is_done,
-        note.pomodoro_count,
-        note.title,
-        note.created_at,
-        note.updated_at,
-        note.content
-    );
+    let nested_children = serialize_children(&child.children, indent + 2);
+    let nested_section = if nested_children.is_empty() {
+        String::new()
+    } else {
+        format!("\n{}", nested_children)
+    };
 
-    fs::write(path, content).map_err(|e| e.to_string())?;
-    Ok(())
+    format!(
+        "{}---\n{}id: {}\n{}is_task: {}\n{}is_done: {}\n{}pomodoro_count: {}\n{}title: {}\n{}created_at: {}\n{}updated_at: {}\n{}---{}{}",
+        prefix, prefix, child.id, prefix, child.is_task, prefix, child.is_done, prefix,
+        child.pomodoro_count, prefix, child.title, prefix, child.created_at, prefix,
+        child.updated_at, prefix, indented_content, nested_section
+    )
+}
+
+fn serialize_children(children: &[Note], indent: usize) -> String {
+    children
+        .iter()
+        .map(|child| serialize_child_note(child, indent))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn build_note_content(note: &Note) -> String {
+    let children_section = if note.children.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n{}", serialize_children(&note.children, 0))
+    };
+
+    format!(
+        "---\n{}\n---\n\n{}{}",
+        build_frontmatter(note),
+        note.content,
+        children_section
+    )
+}
+
+fn split_metadata_and_content(content: &str) -> Result<(&str, &str), String> {
+    let parts: Vec<&str> = content.splitn(3, "---").collect();
+    match parts.as_slice() {
+        [_, metadata, rest] => Ok((metadata, rest)),
+        _ => Err("Invalid note format".to_string()),
+    }
+}
+
+fn extract_fields(metadata: &str) -> Result<Note, String> {
+    let get_field = |key: &str| extract_field(metadata, key);
+
+    Ok(Note {
+        id: get_field("id").ok_or("Missing ID")?,
+        parent_id: get_field("parent_id"),
+        title: get_field("title").unwrap_or_default(),
+        content: String::new(),
+        is_task: get_field("is_task")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(false),
+        is_done: get_field("is_done")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(false),
+        pomodoro_count: get_field("pomodoro_count")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        created_at: get_field("created_at")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        updated_at: get_field("updated_at")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0),
+        children: Vec::new(),
+    })
+}
+
+fn find_nested_section(content: &str) -> (String, Option<String>) {
+    if let Some(pos) = content.find("\n---\n") {
+        let before_dash = &content[..pos];
+        let last_newline = before_dash.rfind('\n').unwrap_or(0);
+        let line_before = &before_dash[last_newline..];
+
+        if !line_before.chars().all(|c| c.is_whitespace() || c == '\n') {
+            (content.trim().to_string(), None)
+        } else {
+            (
+                content[..pos].trim().to_string(),
+                Some(content[pos + 1..].to_string()),
+            )
+        }
+    } else {
+        (content.trim().to_string(), None)
+    }
+}
+
+fn parse_nested_notes(children_str: &str, parent_id: &str) -> Result<Vec<Note>, String> {
+    let mut children = Vec::new();
+    let mut current = children_str;
+
+    while let Some(pos) = current.find("---\n") {
+        let child_section = &current[pos + 4..];
+
+        if let Some(end_pos) = child_section.find("\n---\n") {
+            let child_full = &child_section[..end_pos];
+            if let Ok(child) = parse_note_file(
+                &format!("---\n{}---\n", child_full),
+                Some(parent_id.to_string()),
+            ) {
+                children.push(child);
+            }
+            current = &child_section[end_pos..];
+        } else {
+            if let Ok(child) = parse_note_file(
+                &format!("---\n{}---\n", child_section),
+                Some(parent_id.to_string()),
+            ) {
+                children.push(child);
+            }
+            break;
+        }
+    }
+
+    Ok(children)
+}
+
+fn compose_note(mut note: Note, content: String, children: Vec<Note>) -> Note {
+    note.content = content;
+    note.children = children;
+    note
+}
+
+pub fn parse_note_file(content: &str, parent_id: Option<String>) -> Result<Note, String> {
+    let (metadata, rest) = split_metadata_and_content(content)?;
+    let mut note = extract_fields(metadata)?;
+    note.parent_id = parent_id.or(note.parent_id);
+
+    let (note_content, children_section) = find_nested_section(rest);
+    let children = children_section
+        .as_ref()
+        .and_then(|cs| parse_nested_notes(cs, &note.id).ok())
+        .unwrap_or_default();
+
+    Ok(compose_note(note, note_content, children))
+}
+
+// I/O operations
+
+pub fn save_note(note: &Note) -> Result<(), String> {
+    if note.parent_id.is_some() {
+        return Ok(());
+    }
+
+    let path = get_note_path(&note.id)?;
+    let content = build_note_content(note);
+    fs::write(path, content).map_err(|e| e.to_string())
 }
 
 pub fn load_note(id: &str) -> Result<Note, String> {
     let path = get_note_path(id)?;
     let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    parse_note_file(&content, None)
+}
 
-    parse_note_file(&content)
+fn load_note_files() -> Result<Vec<PathBuf>, String> {
+    get_notes_dir()
+        .and_then(|notes_dir| {
+            fs::read_dir(notes_dir)
+                .map_err(|e| e.to_string())
+                .map(|dir_entries| {
+                    dir_entries
+                        .filter_map(|entry| entry.ok())
+                        .map(|entry| entry.path())
+                        .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("md"))
+                        .collect()
+                })
+        })
+}
+
+fn read_note_from_path(path: PathBuf) -> Option<Note> {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| parse_note_file(&content, None).ok())
 }
 
 pub fn load_all_notes() -> Result<Vec<Note>, String> {
-    let notes_dir = get_notes_dir()?;
-
-    let notes: Vec<Note> = fs::read_dir(notes_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("md"))
-        .filter_map(|path| fs::read_to_string(path).ok())
-        .filter_map(|content| parse_note_file(&content).ok())
-        .collect();
-
-    Ok(notes)
+    load_note_files().map(|paths| {
+        paths
+            .into_par_iter()
+            .filter_map(read_note_from_path)
+            .collect()
+    })
 }
+
+fn find_children_in_note(note: &Note, parent_id: &str) -> Vec<Note> {
+    note.children
+        .iter()
+        .filter(|child| child.id == parent_id || child.parent_id.as_deref() == Some(parent_id))
+        .cloned()
+        .chain(
+            note.children
+                .iter()
+                .flat_map(|child| find_children_in_note(child, parent_id))
+        )
+        .collect()
+}
+
 pub fn get_child_note(parent_id: &str) -> Result<Vec<Note>, String> {
-    let all_notes = load_all_notes()?;
-
-    let children: Vec<Note> = all_notes
-        .into_iter()
-        .filter(|n| n.parent_id.as_deref() == Some(parent_id))
-        .collect();
-
-    Ok(children)
+    load_all_notes().map(|notes| {
+        notes
+            .iter()
+            .flat_map(|note| find_children_in_note(note, parent_id))
+            .collect()
+    })
 }
 
 pub fn delete_note(id: &str) -> Result<(), String> {
     let path = get_note_path(id)?;
-
     if path.exists() {
         fs::remove_file(path).map_err(|e| e.to_string())?;
     }
-
     Ok(())
-}
-
-fn parse_note_file(content: &str) -> Result<Note, String> {
-    let parts: Vec<&str> = content.splitn(3, "---").collect();
-    match parts.as_slice() {
-        [_, metadata, note_content] => {
-            let find_field = |key: &str| -> Option<String> {
-                metadata
-                    .lines()
-                    .find(|line| line.trim().starts_with(key))
-                    .and_then(|line| line.split_once(':'))
-                    .map(|(_, val)| val.trim().to_string())
-            };
-            Ok(Note {
-                id: find_field("id").ok_or("Missing ID")?,
-                title: find_field("title").unwrap_or_default(),
-                content: note_content.trim().to_string(),
-                created_at: find_field("created_at")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0),
-                updated_at: find_field("updated_at")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0),
-                parent_id: find_field("parent_id"),
-
-                is_task: find_field("is_task")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(false),
-                is_done: find_field("is_done")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(false),
-                pomodoro_count: find_field("pomodoro_count")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(0),
-            })
-        }
-        _ => Err("Invalid note format".to_string()),
-    }
 }

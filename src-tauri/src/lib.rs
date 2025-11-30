@@ -20,7 +20,9 @@ pub fn run() {
             notes::commands::get_note,
             notes::commands::update_note,
             notes::commands::delete_note,
-            notes::commands::load_all_notes
+            notes::commands::load_all_notes,
+            notes::commands::parse_checkboxes,
+            notes::commands::update_note_checkbox_status
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
