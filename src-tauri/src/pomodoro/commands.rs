@@ -15,9 +15,6 @@ pub struct TimerState {
     pub timer: Mutex<PomodoroState>,
 }
 
-// -----------------------------
-// Helpers
-// -----------------------------
 pub fn to_seconds(minutes: u32) -> u32 {
     minutes * 60
 }
@@ -78,24 +75,21 @@ pub fn reset(state: PomodoroState) -> PomodoroState {
     }
 }
 
-// -----------------------------
-// State checks
-// -----------------------------
 pub fn is_finished(state: &PomodoroState) -> bool {
     state.remaining == 0
 }
 
-pub fn is_running(state: &PomodoroState) -> bool {
-    !state.is_paused && state.remaining > 0
-}
-
-pub fn is_break_time(state: &PomodoroState) -> bool {
-    state.is_break
-}
-
-pub fn is_work_time(state: &PomodoroState) -> bool {
-    !state.is_break
-}
+// pub fn is_running(state: &PomodoroState) -> bool {
+//     !state.is_paused && state.remaining > 0
+// }
+//
+// pub fn is_break_time(state: &PomodoroState) -> bool {
+//     state.is_break
+// }
+//
+// pub fn is_work_time(state: &PomodoroState) -> bool {
+//     !state.is_break
+// }
 
 pub fn is_break_finished(state: &PomodoroState) -> bool {
     state.is_break && is_finished(state)
@@ -105,9 +99,6 @@ pub fn is_work_finished(state: &PomodoroState) -> bool {
     !state.is_break && is_finished(state)
 }
 
-// -----------------------------
-// FSM
-// -----------------------------
 pub fn next_state(state: &PomodoroState) -> PomodoroState {
     if is_work_finished(state) {
         start_break_timer(state)
@@ -118,24 +109,18 @@ pub fn next_state(state: &PomodoroState) -> PomodoroState {
     }
 }
 
-// -----------------------------
-// Formatting
-// -----------------------------
-pub fn format_time(seconds: u32) -> String {
-    let minutes = seconds / 60;
-    let secs = seconds % 60;
-    format!("{:02}:{:02}", minutes, secs)
-}
+// pub fn format_time(seconds: u32) -> String {
+//     let minutes = seconds / 60;
+//     let secs = seconds % 60;
+//     format!("{:02}:{:02}", minutes, secs)
+// }
 
-pub fn timer_info(state: &PomodoroState) -> String {
-    let mode = if state.is_break { "BREAK" } else { "WORK" };
-    let status = if state.is_paused { "PAUSED" } else { "RUNNING" };
-    format!("[{}] {} | {}", mode, status, format_time(state.remaining))
-}
+// pub fn timer_info(state: &PomodoroState) -> String {
+//     let mode = if state.is_break { "BREAK" } else { "WORK" };
+//     let status = if state.is_paused { "PAUSED" } else { "RUNNING" };
+//     format!("[{}] {} | {}", mode, status, format_time(state.remaining))
+// }
 
-// -----------------------------
-// Tauri Commands
-// -----------------------------
 #[tauri::command]
 pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
     let new_state = PomodoroState {
@@ -159,7 +144,7 @@ pub fn get_timer_state(state: State<TimerState>) -> PomodoroState {
 pub fn tick_timer(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = tick(timer.clone());
-    *timer = next_state(&timer); // auto-switch
+    *timer = next_state(&timer);
     timer.clone()
 }
 

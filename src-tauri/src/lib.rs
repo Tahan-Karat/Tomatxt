@@ -47,6 +47,7 @@ pub fn run() {
             pomodoro::commands::is_timer_finished,
             // pomodoro::commands::check_work_finished,
             // pomodoro::commands::check_break_finished,
+            pomodoro::commands::update_work_duration,
             pomodoro::commands::update_break_duration,
 
         ])
