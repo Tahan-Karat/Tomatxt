@@ -7,6 +7,8 @@ pub struct Note {
     pub parent_id: Option<String>,
     pub title: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_without_checkboxes: Option<String>,
 
     pub is_task: bool,
     pub is_done: bool,
@@ -51,6 +53,7 @@ impl Note {
             id,
             title,
             content,
+            content_without_checkboxes: None,
             created_at: now,
             updated_at: now,
             parent_id: None,

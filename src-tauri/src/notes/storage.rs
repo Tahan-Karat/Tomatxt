@@ -109,6 +109,7 @@ fn extract_fields(metadata: &str) -> Result<Note, String> {
         parent_id: get_field("parent_id"),
         title: get_field("title").unwrap_or_default(),
         content: String::new(),
+        content_without_checkboxes: None,
         is_task: get_field("is_task")
             .and_then(|v| v.parse().ok())
             .unwrap_or(false),
@@ -169,17 +170,15 @@ fn parse_nested_notes(children_str: &str, parent_id: &str) -> Result<Vec<Note>, 
                     }
                 }
             } else {
-                // No more "---\n---" patterns found, but we have remaining content
                 match parse_note_file(
                     &format!("---\n{}---\n", child_section),
                     Some(parent_id.to_string()),
                 ) {
                     Ok(child) => Ok(vec![child]),
-                    Err(_) => Ok(vec![]), // Return empty vec if parsing fails
+                    Err(_) => Ok(vec![]),
                 }
             }
         } else {
-            // No more "---\n" found, return empty vector
             Ok(vec![])
         }
     }
@@ -221,25 +220,18 @@ pub fn save_note(note: &Note) -> Result<(), String> {
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
-pub fn load_note(id: &str) -> Result<Note, String> {
-    let path = get_note_path(id)?;
-    let content = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    parse_note_file(&content, None)
-}
-
 fn load_note_files() -> Result<Vec<PathBuf>, String> {
-    get_notes_dir()
-        .and_then(|notes_dir| {
-            fs::read_dir(notes_dir)
-                .map_err(|e| e.to_string())
-                .map(|dir_entries| {
-                    dir_entries
-                        .filter_map(|entry| entry.ok())
-                        .map(|entry| entry.path())
-                        .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("md"))
-                        .collect()
-                })
-        })
+    get_notes_dir().and_then(|notes_dir| {
+        fs::read_dir(notes_dir)
+            .map_err(|e| e.to_string())
+            .map(|dir_entries| {
+                dir_entries
+                    .filter_map(|entry| entry.ok())
+                    .map(|entry| entry.path())
+                    .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("md"))
+                    .collect()
+            })
+    })
 }
 
 fn read_note_from_path(path: PathBuf) -> Option<Note> {
@@ -253,28 +245,6 @@ pub fn load_all_notes() -> Result<Vec<Note>, String> {
         paths
             .into_par_iter()
             .filter_map(read_note_from_path)
-            .collect()
-    })
-}
-
-fn find_children_in_note(note: &Note, parent_id: &str) -> Vec<Note> {
-    note.children
-        .iter()
-        .filter(|child| child.id == parent_id || child.parent_id.as_deref() == Some(parent_id))
-        .cloned()
-        .chain(
-            note.children
-                .iter()
-                .flat_map(|child| find_children_in_note(child, parent_id))
-        )
-        .collect()
-}
-
-pub fn get_child_note(parent_id: &str) -> Result<Vec<Note>, String> {
-    load_all_notes().map(|notes| {
-        notes
-            .iter()
-            .flat_map(|note| find_children_in_note(note, parent_id))
             .collect()
     })
 }

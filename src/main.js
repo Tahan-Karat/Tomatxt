@@ -213,7 +213,7 @@ async function openNoteDetail(noteId) {
                 currentNote = note;
 
                 document.getElementById('detail-title').textContent = note.title;
-                document.getElementById('detail-description').textContent = note.content;
+                document.getElementById('detail-description').textContent = note.content_without_checkboxes || note.content;
                 document.getElementById('detail-title-input').value = note.title;
                 document.getElementById('detail-description-input').value = note.content;
 
@@ -309,7 +309,7 @@ async function saveCurrentNote() {
                 }
 
                 document.getElementById('detail-title').textContent = updatedNote.title;
-                document.getElementById('detail-description').textContent = updatedNote.content;
+                document.getElementById('detail-description').textContent = updatedNote.content_without_checkboxes || updatedNote.content;
 
                 showNotification('Note saved successfully', 'success');
                 toggleEditState(false);
@@ -365,7 +365,7 @@ async function addSubnote(event) {
 
                 currentNote = updatedNote;
 
-                document.getElementById('detail-description').textContent = updatedNote.content;
+                document.getElementById('detail-description').textContent = updatedNote.content_without_checkboxes || updatedNote.content;
                 document.getElementById('detail-description-input').value = updatedNote.content;
 
                 await createSubnotesFromCheckboxes(currentNote.id, updatedNote.content);
