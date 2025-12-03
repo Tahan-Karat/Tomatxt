@@ -14,8 +14,11 @@ function getRandomNoteColor() {
 async function initApp() {
         try {
                 await loadAllNotes();
-                await initTimer();
+
                 setupEventListeners();
+                setupPomodoroEventListeners();
+
+                await initTimer();
         } catch (error) {
                 console.error('Failed to initialize app:', error);
                 showNotification('Failed to initialize app', 'error');
@@ -83,8 +86,9 @@ function setupEventListeners() {
                         }
                 }
         });
+}
 
-        // === POMODORO EVENT LISTENERS ===
+function setupPomodoroEventListeners() {
         const playBtn = document.querySelector('.btn-circle--primary');
         const resetBtn = document.querySelector('.btn-circle--ghost');
         const settingsBtn = document.querySelector('.pomodoro__settings-btn');
@@ -223,8 +227,13 @@ async function openNoteDetail(noteId) {
                 const noteDetail = document.querySelector('.note-detail');
                 noteDetail.classList.add('is-active');
                 noteDetail.setAttribute('aria-hidden', 'false');
+                noteDetail.style.display = 'flex';
 
                 toggleEditState(false);
+
+                if (currentState) {
+                        updateDisplay();
+                }
         } catch (error) {
                 console.error('Failed to open note detail:', error);
                 showNotification('Failed to open note', 'error');
@@ -235,6 +244,7 @@ function closeNoteDetail() {
         const noteDetail = document.querySelector('.note-detail');
         noteDetail.classList.remove('is-active');
         noteDetail.setAttribute('aria-hidden', 'true');
+        noteDetail.style.display = 'none';
 
         const subnoteList = document.getElementById('subnote-list');
         if (subnoteList) {
@@ -440,35 +450,34 @@ function toggleNoteMenu(event) {
 
 
 async function initTimer() {
-        currentState = await invoke('get_timer_state');
-        updateDisplay();
+        try {
+                currentState = await invoke('get_timer_state');
+                updateDisplay();
+        } catch (error) {
+                console.error('Failed to init timer:', error);
+        }
 }
 
 function updateDisplay() {
         if (!currentState) return;
-
         const pomodoroTime = document.getElementById('pomodoro-time');
-        const pomodoroContainer = document.querySelector('.pomodoro');
+        const container = document.querySelector('.pomodoro');
         const workTab = document.querySelector('[data-timer-tab="work"]');
         const breakTab = document.querySelector('[data-timer-tab="break"]');
+        if (!pomodoroTime || !container) return;
 
-        if (!pomodoroTime) return;
-
-        const time = formatTime(currentState.remaining);
-        pomodoroTime.textContent = time;
-
+        pomodoroTime.textContent = formatTime(currentState.remaining);
         if (currentState.is_break) {
-                pomodoroContainer.classList.remove('pomodoro--work');
-                pomodoroContainer.classList.add('pomodoro--break');
-                breakTab.classList.add('is-active');
-                workTab.classList.remove('is-active');
+                container.classList.add('pomodoro--break');
+                container.classList.remove('pomodoro--work');
+                breakTab?.classList.add('is-active');
+                workTab?.classList.remove('is-active');
         } else {
-                pomodoroContainer.classList.remove('pomodoro--break');
-                pomodoroContainer.classList.add('pomodoro--work');
-                workTab.classList.add('is-active');
-                breakTab.classList.remove('is-active');
+                container.classList.add('pomodoro--work');
+                container.classList.remove('pomodoro--break');
+                workTab?.classList.add('is-active');
+                breakTab?.classList.remove('is-active');
         }
-
         updatePlayButton();
 }
 
@@ -479,69 +488,41 @@ function formatTime(seconds) {
 }
 
 function updatePlayButton() {
-        if (!currentState) return;
-
         const playBtn = document.querySelector('.btn-circle--primary');
         if (!playBtn) return;
 
-        const isRunning = !currentState.is_paused && currentState.remaining > 0;
-
-        if (isRunning) {
-                playBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M6 5H8V19H6V5ZM16 5H18V19H16V5Z"></path>
-            </svg>
-        `;
+        if (currentState.is_paused) {
+                playBtn.innerHTML = '▶️';
         } else {
-                playBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M19.376 12.4161L8.77735 19.4818C8.54759 19.635 8.23715 19.5729 8.08397 19.3432C8.02922 19.261 8 19.1645 8 19.0658V4.93433C8 4.65818 8.22386 4.43433 8.5 4.43433C8.59871 4.43433 8.69522 4.46355 8.77735 4.5183L19.376 11.584C19.6057 11.7372 19.6678 12.0477 19.5146 12.2774C19.478 12.3323 19.4309 12.3795 19.376 12.4161Z"></path>
-            </svg>
-        `;
+                playBtn.innerHTML = '⏸️';
         }
 }
 
 async function toggleTimer() {
         if (!currentState) return;
-
         if (currentState.is_paused) {
-                await invoke('resume_timer');
-                currentState.is_paused = false;
+                currentState = await invoke('resume_timer');
                 startTicking();
         } else {
-                await invoke('pause_timer');
-                currentState.is_paused = true;
+                currentState = await invoke('pause_timer');
                 stopTicking();
         }
-
-        updatePlayButton();
+        updateDisplay();
 }
 
 function startTicking() {
         if (timerInterval) return;
-
         timerInterval = setInterval(async () => {
-                const timeStr = await invoke('tick_timer');
-                currentState = await invoke('get_timer_state');
-                const pomodoroTime = document.getElementById('pomodoro-time');
-                if (pomodoroTime) {
-                        pomodoroTime.textContent = timeStr;
-                }
-
+                currentState = await invoke('tick_timer');
+                updateDisplay();
                 if (currentState.remaining === 0) {
                         stopTicking();
-
-                        if (!currentState.is_break) {
-                                if (confirm('Work time selesai! Mulai break?')) {
-                                        await invoke('start_break');
-                                        currentState = await invoke('get_timer_state');
-                                        updateDisplay();
-                                        switchTab("work");
-                                }
-                        } else {
-                                alert('Break time selesai!')
-                                await invoke('reset_timer');
-                                currentState = await invoke('get_timer_state');
+                        if (!currentState.is_break && confirm('Work selesai! Mulai break?')) {
+                                currentState = await invoke('start_break');
+                                updateDisplay();
+                        } else if (currentState.is_break) {
+                                alert('Break selesai!');
+                                currentState = await invoke('reset_timer');
                                 updateDisplay();
                         }
                 }
@@ -557,62 +538,46 @@ function stopTicking() {
 
 async function handleReset() {
         stopTicking();
-        const timeStr = await invoke('reset_timer');
-        currentState = await invoke('get_timer_state');
-        const pomodoroTime = document.getElementById('pomodoro-time');
-        if (pomodoroTime) {
-                pomodoroTime.textContent = timeStr;
-        }
-        updatePlayButton();
+        currentState = await invoke('reset_timer');
+        updateDisplay();
 }
 
 function toggleSettings() {
-        const settingsForm = document.getElementById('pomodoro-settings');
-        if (!settingsForm) return;
-
-        settingsForm.classList.toggle('is-open');
-        settingsForm.setAttribute(
-                'aria-hidden',
-                !settingsForm.classList.contains('is-open')
-        );
+        const form = document.getElementById('pomodoro-settings');
+        form?.classList.toggle('is-open');
+        form?.setAttribute('aria-hidden', !form?.classList.contains('is-open'));
 }
 
 async function handleSettingsSubmit(e) {
         e.preventDefault();
-
         const workMin = parseInt(document.getElementById('work-duration').value);
         const breakMin = parseInt(document.getElementById('break-duration').value);
-
         stopTicking();
-
-        currentState = await invoke('init_timer', {
-                workMin,
-                breakMin
-        });
-
+        currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
         updateDisplay();
         toggleSettings();
 }
 
 async function switchTab(mode) {
         stopTicking();
-
         if (mode === 'break' && !currentState.is_break) {
-                await invoke('start_break');
+                currentState = await invoke('start_break');
         } else if (mode === 'work' && currentState.is_break) {
-                await invoke('reset_timer');
+                currentState = await invoke('start_work');
         }
-
-        currentState = await invoke('get_timer_state');
         updateDisplay();
 }
 
-function showNotification(message, type) {
-        console.log(`${type}: ${message}`);
+function showNotification(msg, type = 'info') {
+        alert(msg);
 }
 
-function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+function escapeHtml(str) {
+        return str.replace(/[&<>"']/g, m => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+        }[m]));
 }
