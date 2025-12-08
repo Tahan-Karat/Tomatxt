@@ -131,7 +131,6 @@ pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> Po
         is_break: false,
         is_paused: false,
     };
-
     let mut timer = state.timer.lock().unwrap();
     *timer = new_state.clone();
     new_state
