@@ -101,13 +101,11 @@ pub fn is_work_finished(state: &PomodoroState) -> bool {
 }
 
 pub fn next_state(state: &PomodoroState) -> PomodoroState {
-    if is_work_finished(state) {
-        start_break_timer(state)
-    } else if is_break_finished(state) {
-        start_work_timer(state)
-    } else {
-        state.clone()
-    }
+    match (is_work_finished(state), is_break_finished(state)) {
+        (true, _) => start_break_timer(state),
+        (_, true) => start_work_timer(state),
+        _ => state.clone(),
+    }   
 }
 
 // pub fn format_time(seconds: u32) -> String {
