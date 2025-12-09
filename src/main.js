@@ -553,7 +553,7 @@ async function handleSettingsSubmit(e) {
         const workMin = parseInt(document.getElementById('work-duration').value);
         const breakMin = parseInt(document.getElementById('break-duration').value);
         stopTicking();
-        currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
+        currentState = await invoke('init_timer', { workMin: workMin, breakMin: breakMin });
         updateDisplay();
         toggleSettings();
 }
