@@ -414,9 +414,9 @@ function renderCheckboxes(parentId, checkboxes) {
                         checkboxElement.addEventListener('change', async (event) => {
                                 try {
                                         const updatedNote = await invoke('update_note_checkbox_status', {
-                                                noteId: parentId,
-                                                checkboxText: checkbox.text,
-                                                newStatus: event.target.checked
+                                                note_id: parentId,
+                                                checkbox_text: checkbox.text,
+                                                new_status: event.target.checked
                                         });
 
                                         currentNote = updatedNote;
@@ -553,7 +553,7 @@ async function handleSettingsSubmit(e) {
         const workMin = parseInt(document.getElementById('work-duration').value);
         const breakMin = parseInt(document.getElementById('break-duration').value);
         stopTicking();
-        currentState = await invoke('init_timer', { workMin: workMin, breakMin: breakMin });
+        currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
         updateDisplay();
         toggleSettings();
 }

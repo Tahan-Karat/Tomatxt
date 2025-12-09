@@ -77,7 +77,7 @@ where
         .map(|updated| (new_notes, updated))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_note(
     title: String,
     content: String,
@@ -94,14 +94,14 @@ pub fn create_note(
     Ok(note)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_notes(state: State<NotesState>) -> Result<Vec<NotePreview>, String> {
     with_notes_state(&state, |notes_guard| {
         Ok(notes_guard.iter().map(|note| note.to_preview(0)).collect())
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
     with_notes_state(&state, |notes_guard| {
         find_note(&*notes_guard, &id)
@@ -124,7 +124,7 @@ pub fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_note(
     id: String,
     title: String,
@@ -165,7 +165,7 @@ pub fn update_note(
     Ok(updated)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
     // Delete from storage first
     storage::delete_note(&id)?;
@@ -179,7 +179,7 @@ pub fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
     let loaded_notes = storage::load_all_notes()?;
 
@@ -191,12 +191,12 @@ pub fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
     Ok(loaded_notes)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn parse_checkboxes(content: String) -> Result<Vec<checkbox_parser::Checkbox>, String> {
     Ok(checkbox_parser::parse_checkboxes(&content))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_note_checkbox_status(
     note_id: String,
     checkbox_text: String,

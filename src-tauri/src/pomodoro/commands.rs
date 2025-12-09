@@ -122,7 +122,7 @@ pub fn next_state(state: &PomodoroState) -> PomodoroState {
 //     format!("[{}] {} | {}", mode, status, format_time(state.remaining))
 // }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
     let new_state = PomodoroState {
         work_duration: to_seconds(work_min),
@@ -136,12 +136,12 @@ pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> Po
     new_state
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_timer_state(state: State<TimerState>) -> PomodoroState {
     state.timer.lock().unwrap().clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn tick_timer(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = tick(timer.clone());
@@ -149,42 +149,42 @@ pub fn tick_timer(state: State<TimerState>) -> PomodoroState {
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn start_work(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = start_work_timer(&timer);
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn start_break(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = start_break_timer(&timer);
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn pause_timer(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = pause(timer.clone());
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn resume_timer(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = resume(timer.clone());
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn reset_timer(state: State<TimerState>) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     *timer = reset(timer.clone());
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_work_duration(state: State<TimerState>, minutes: u32) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     let new_duration = to_seconds(minutes);
@@ -200,7 +200,7 @@ pub fn update_work_duration(state: State<TimerState>, minutes: u32) -> PomodoroS
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn update_break_duration(state: State<TimerState>, minutes: u32) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
     let new_duration = to_seconds(minutes);
@@ -216,7 +216,7 @@ pub fn update_break_duration(state: State<TimerState>, minutes: u32) -> Pomodoro
     timer.clone()
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn is_timer_finished(state: State<TimerState>) -> bool {
     let timer = state.timer.lock().unwrap();
     is_finished(&timer)
