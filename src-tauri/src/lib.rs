@@ -38,14 +38,16 @@ pub fn run() {
             pomodoro::commands::init_timer,
             pomodoro::commands::get_timer_state,
             pomodoro::commands::start_break,
+            pomodoro::commands::start_work,
             pomodoro::commands::tick_timer,
             pomodoro::commands::pause_timer,
             pomodoro::commands::resume_timer,
             pomodoro::commands::reset_timer,
             pomodoro::commands::is_timer_finished,
             // pomodoro::commands::check_work_finished,
-            pomodoro::commands::check_break_finished,
+            // pomodoro::commands::check_break_finished,
             pomodoro::commands::update_break_duration,
+            pomodoro::commands::update_work_duration,
 
         ])
         .run(tauri::generate_context!())
