@@ -1,42 +1,42 @@
-use super::model::{Note, NotePreview};
+use super::model::{note_to_preview, Note, NotePreview};
 use super::{checkbox_parser, storage, NotesState};
 use std::sync::MutexGuard;
 use tauri::State;
 
-/// Functional utility to safely access and transform state
 fn with_notes_state<T, F>(state: &State<NotesState>, transformer: F) -> Result<T, String>
 where
     F: FnOnce(MutexGuard<Vec<Note>>) -> Result<T, String>,
 {
-    let notes = state.notes.lock().map_err(|e| e.to_string())?;
-    transformer(notes)
+    state
+        .notes
+        .lock()
+        .map_err(|e| e.to_string())
+        .and_then(transformer)
 }
 
-/// Functional utility to modify state with proper locking
 fn modify_notes_state<T, F>(state: &State<NotesState>, modifier: F) -> Result<T, String>
 where
     F: FnOnce(&mut Vec<Note>) -> Result<T, String>,
 {
-    let mut notes = state.notes.lock().map_err(|e| e.to_string())?;
-    modifier(&mut notes)
+    state
+        .notes
+        .lock()
+        .map_err(|e| e.to_string())
+        .and_then(|mut notes| modifier(&mut notes))
 }
 
-/// Find a note by ID functionally
 fn find_note<'a>(notes: &'a [Note], id: &str) -> Option<&'a Note> {
     notes.iter().find(|note| note.id == id)
 }
 
-/// Remove a note from a list functionally
 fn remove_note_from_list(notes: Vec<Note>, id: &str) -> Vec<Note> {
     notes.into_iter().filter(|note| note.id != id).collect()
 }
 
-/// Add a note to a list functionally
 fn add_note_to_list(notes: Vec<Note>, note: Note) -> Vec<Note> {
     [notes, vec![note]].concat()
 }
 
-/// Immutably update note timestamp using struct update syntax
 fn update_timestamp(note: Note) -> Note {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -49,7 +49,6 @@ fn update_timestamp(note: Note) -> Note {
     }
 }
 
-/// Immutably find and update a note using fold
 fn find_and_update_note<F>(
     notes: Vec<Note>,
     id: &str,
@@ -77,8 +76,7 @@ where
         .map(|updated| (new_notes, updated))
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn create_note(
+pub(crate) fn create_note(
     title: String,
     content: String,
     state: State<NotesState>,
@@ -94,15 +92,13 @@ pub fn create_note(
     Ok(note)
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn get_notes(state: State<NotesState>) -> Result<Vec<NotePreview>, String> {
+pub(crate) fn get_notes(state: State<NotesState>) -> Result<Vec<NotePreview>, String> {
     with_notes_state(&state, |notes_guard| {
-        Ok(notes_guard.iter().map(|note| note.to_preview(0)).collect())
+        Ok(notes_guard.iter().map(|note| note_to_preview(note, 0)).collect())
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
+pub(crate) fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
     with_notes_state(&state, |notes_guard| {
         find_note(&*notes_guard, &id)
             .cloned()
@@ -124,8 +120,7 @@ pub fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn update_note(
+pub(crate) fn update_note(
     id: String,
     title: String,
     content: String,
@@ -165,8 +160,7 @@ pub fn update_note(
     Ok(updated)
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
+pub(crate) fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
     // Delete from storage first
     storage::delete_note(&id)?;
 
@@ -179,8 +173,7 @@ pub fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
+pub(crate) fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
     let loaded_notes = storage::load_all_notes()?;
 
     modify_notes_state(&state, |notes| {
@@ -191,13 +184,11 @@ pub fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
     Ok(loaded_notes)
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn parse_checkboxes(content: String) -> Result<Vec<checkbox_parser::Checkbox>, String> {
+pub(crate) fn parse_checkboxes(content: String) -> Result<Vec<checkbox_parser::Checkbox>, String> {
     Ok(checkbox_parser::parse_checkboxes(&content))
 }
 
-#[tauri::command(rename_all = "snake_case")]
-pub fn update_note_checkbox_status(
+pub(crate) fn update_note_checkbox_status(
     note_id: String,
     checkbox_text: String,
     new_status: bool,

@@ -1,16 +1,66 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod notes;
 mod pomodoro;
 
-use notes::NotesState;
+use notes::{model::Note, NotesState};
 use pomodoro::commands::{to_seconds, PomodoroState};
 use pomodoro::TimerState;
 use std::sync::Mutex;
+use tauri::State;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn create_note(title: String, content: String, state: State<NotesState>) -> Result<Note, String> {
+    notes::commands::create_note(title, content, state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn get_notes(state: State<NotesState>) -> Result<Vec<notes::model::NotePreview>, String> {
+    notes::commands::get_notes(state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn get_note(id: String, state: State<NotesState>) -> Result<Note, String> {
+    notes::commands::get_note(id, state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn update_note(
+    id: String,
+    title: String,
+    content: String,
+    state: State<NotesState>,
+) -> Result<Note, String> {
+    notes::commands::update_note(id, title, content, state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn delete_note(id: String, state: State<NotesState>) -> Result<(), String> {
+    notes::commands::delete_note(id, state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn load_all_notes(state: State<NotesState>) -> Result<Vec<Note>, String> {
+    notes::commands::load_all_notes(state)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn parse_checkboxes(content: String) -> Result<Vec<notes::checkbox_parser::Checkbox>, String> {
+    notes::commands::parse_checkboxes(content)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+fn update_note_checkbox_status(
+    note_id: String,
+    checkbox_text: String,
+    new_status: bool,
+    state: State<NotesState>,
+) -> Result<Note, String> {
+    notes::commands::update_note_checkbox_status(note_id, checkbox_text, new_status, state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -29,14 +79,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
-            notes::commands::create_note,
-            notes::commands::get_notes,
-            notes::commands::get_note,
-            notes::commands::update_note,
-            notes::commands::delete_note,
-            notes::commands::load_all_notes,
-            notes::commands::parse_checkboxes,
-            notes::commands::update_note_checkbox_status,
+            create_note,
+            get_notes,
+            get_note,
+            update_note,
+            delete_note,
+            load_all_notes,
+            parse_checkboxes,
+            update_note_checkbox_status,
             // Pomodoro commands
             pomodoro::commands::init_timer,
             pomodoro::commands::get_timer_state,

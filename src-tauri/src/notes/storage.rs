@@ -4,17 +4,31 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-fn get_notes_dir() -> Result<PathBuf, String> {
-    let home = env::var("HOME")
-        .or_else(|_| env::var("USERPROFILE"))
-        .map_err(|_| "Could not find home directory")?;
+fn home_dir_error(e: env::VarError) -> String {
+    format!("Could not find home directory: {}", e)
+}
 
-    let notes_dir = PathBuf::from(home).join(".tomatxt").join("notes");
+fn get_home_dir() -> Result<String, String> {
+    env::var("HOME")
+        .or_else(get_userprofile)
+        .map_err(home_dir_error)
+}
 
+fn get_userprofile(_: env::VarError) -> Result<String, env::VarError> {
+    env::var("USERPROFILE")
+}
+
+fn create_notes_dir(notes_dir: &PathBuf) -> Result<(), String> {
     if !notes_dir.exists() {
-        fs::create_dir_all(&notes_dir).map_err(|e| e.to_string())?;
+        fs::create_dir_all(notes_dir).map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
 
+fn get_notes_dir() -> Result<PathBuf, String> {
+    let home = get_home_dir()?;
+    let notes_dir = PathBuf::from(home).join(".tomatxt").join("notes");
+    create_notes_dir(&notes_dir)?;
     Ok(notes_dir)
 }
 

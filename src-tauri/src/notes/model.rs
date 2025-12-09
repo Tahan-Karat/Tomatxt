@@ -36,6 +36,52 @@ pub struct NotePreview {
     pub updated_at: u64,
 }
 
+fn is_checkbox_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with("- [") || trimmed.starts_with("* [")
+}
+
+fn remove_checkboxes(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| !is_checkbox_line(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn truncate_content(content: &str, max_length: usize) -> String {
+    if content.len() > max_length {
+        format!("{}...", &content[..max_length.min(content.len())])
+    } else {
+        content.to_string()
+    }
+}
+
+fn create_preview(content_without_checkboxes: String) -> String {
+    truncate_content(&content_without_checkboxes, 100)
+}
+
+pub fn note_to_preview(note: &Note, child_count: u32) -> NotePreview {
+    let content_without_checkboxes = remove_checkboxes(&note.content);
+    let content_preview = create_preview(content_without_checkboxes.clone());
+
+    NotePreview {
+        id: note.id.clone(),
+        parent_id: note.parent_id.clone(),
+        title: note.title.clone(),
+        content_preview,
+        content_without_checkboxes,
+        child_count,
+        is_task: note.is_task,
+        is_done: note.is_done,
+        pomodoro_count: note.pomodoro_count,
+        created_at: note.created_at,
+        updated_at: note.updated_at,
+    }
+}
+
 impl Note {
     pub fn new(title: String, content: String) -> Self {
         let now = SystemTime::now()
@@ -61,37 +107,6 @@ impl Note {
             is_done: false,
             pomodoro_count: 0,
             children: Vec::new(),
-        }
-    }
-
-    pub fn to_preview(&self, child_count: u32) -> NotePreview {
-        let content_without_checkboxes = self
-            .content
-            .lines()
-            .filter(|line| !line.trim().starts_with("- [") && !line.trim().starts_with("* ["))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .trim()
-            .to_string();
-
-        let content_preview = if content_without_checkboxes.len() > 100 {
-            format!("{}...", &content_without_checkboxes[..100.min(content_without_checkboxes.len())])
-        } else {
-            content_without_checkboxes.clone()
-        };
-
-        NotePreview {
-            id: self.id.clone(),
-            parent_id: self.parent_id.clone(),
-            title: self.title.clone(),
-            content_preview,
-            content_without_checkboxes,
-            child_count,
-            is_task: self.is_task,
-            is_done: self.is_done,
-            pomodoro_count: self.pomodoro_count,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
         }
     }
 }

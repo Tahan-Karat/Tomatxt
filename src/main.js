@@ -215,7 +215,7 @@ async function openNoteDetail(noteId) {
                 document.getElementById('detail-title').textContent = note.title;
                 document.getElementById('detail-description').textContent = note.content_without_checkboxes || note.content;
                 document.getElementById('detail-title-input').value = note.title;
-                document.getElementById('detail-description-input').value = note.content;
+                document.getElementById('detail-description-input').value = note.content_without_checkboxes || note.content;
 
                 const subnoteList = document.getElementById('subnote-list');
                 if (subnoteList) {
@@ -366,7 +366,7 @@ async function addSubnote(event) {
                 currentNote = updatedNote;
 
                 document.getElementById('detail-description').textContent = updatedNote.content_without_checkboxes || updatedNote.content;
-                document.getElementById('detail-description-input').value = updatedNote.content;
+                document.getElementById('detail-description-input').value = updatedNote.content_without_checkboxes || updatedNote.content;
 
                 await createSubnotesFromCheckboxes(currentNote.id, updatedNote.content);
 
