@@ -548,12 +548,27 @@ function toggleSettings() {
         form?.setAttribute('aria-hidden', !form?.classList.contains('is-open'));
 }
 
+// async function handleSettingsSubmit(e) {
+//         e.preventDefault();
+//         const workMin = parseInt(document.getElementById('work-duration').value);
+//         const breakMin = parseInt(document.getElementById('break-duration').value);
+//         stopTicking();
+//         currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
+//         updateDisplay();
+//         toggleSettings();
+// }
+
 async function handleSettingsSubmit(e) {
         e.preventDefault();
         const workMin = parseInt(document.getElementById('work-duration').value);
         const breakMin = parseInt(document.getElementById('break-duration').value);
+        
         stopTicking();
-        currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
+        
+        // Update duration tanpa reset state
+        currentState = await invoke('update_work_duration', { minutes: workMin });
+        currentState = await invoke('update_break_duration', { minutes: breakMin });
+        
         updateDisplay();
         toggleSettings();
 }

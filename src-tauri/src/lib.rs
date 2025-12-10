@@ -90,9 +90,6 @@ pub fn run() {
             // Pomodoro commands
             pomodoro::commands::init_timer,
             pomodoro::commands::get_timer_state,
-            // Pomodoro commands
-            pomodoro::commands::init_timer,
-            pomodoro::commands::get_timer_state,
             pomodoro::commands::start_work,
             pomodoro::commands::start_break,
             pomodoro::commands::tick_timer,
