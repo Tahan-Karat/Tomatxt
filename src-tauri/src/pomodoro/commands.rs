@@ -122,6 +122,7 @@ pub fn next_state(state: &PomodoroState) -> PomodoroState {
 //     format!("[{}] {} | {}", mode, status, format_time(state.remaining))
 // }
 
+//fix if else
 #[tauri::command]
 pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
     let new_state = PomodoroState {
@@ -184,6 +185,7 @@ pub fn reset_timer(state: State<TimerState>) -> PomodoroState {
     timer.clone()
 }
 
+//fix if else
 #[tauri::command]
 pub fn update_work_duration(state: State<TimerState>, minutes: u32) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();
@@ -200,6 +202,7 @@ pub fn update_work_duration(state: State<TimerState>, minutes: u32) -> PomodoroS
     timer.clone()
 }
 
+//fix if else
 #[tauri::command]
 pub fn update_break_duration(state: State<TimerState>, minutes: u32) -> PomodoroState {
     let mut timer = state.timer.lock().unwrap();

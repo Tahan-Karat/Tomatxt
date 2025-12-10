@@ -91,8 +91,8 @@ function setupEventListeners() {
 function setupPomodoroEventListeners() {
         const playBtn = document.querySelector('.btn-circle--primary');
         const resetBtn = document.querySelector('.btn-circle--ghost');
-        const settingsBtn = document.querySelector('.pomodoro__settings-btn');
-        const settingsForm = document.getElementById('pomodoro-settings');
+        const settingsBtn = document.querySelector('.pomodoro__settings-btn'); //tombo; pencetan untuk masuk ke pengaturan
+        const settingsForm = document.getElementById('pomodoro-settings'); //untuk submit settings dari form
         const workTab = document.querySelector('[data-timer-tab="work"]');
         const breakTab = document.querySelector('[data-timer-tab="break"]');
 
@@ -549,13 +549,15 @@ function toggleSettings() {
 }
 
 async function handleSettingsSubmit(e) {
-        e.preventDefault();
-        const workMin = parseInt(document.getElementById('work-duration').value);
-        const breakMin = parseInt(document.getElementById('break-duration').value);
-        stopTicking();
-        currentState = await invoke('init_timer', { work_min: workMin, break_min: breakMin });
-        updateDisplay();
-        toggleSettings();
+    e.preventDefault();
+    const workMin = parseInt(document.getElementById('work-duration-pomodoro').value);
+    const breakMin = parseInt(document.getElementById('break-duration-pomodoro').value);
+    stopTicking();
+    currentState = await invoke('init_timer', { workMin, breakMin });
+    // document.getElementById('work-duration-pomodoro').value = workMin;
+    // document.getElementById('break-duration-pomodoro').value = breakMin;
+    updateDisplay();
+    toggleSettings();
 }
 
 async function switchTab(mode) {
