@@ -144,57 +144,54 @@ fn extract_fields(metadata: &str) -> Result<Note, String> {
 }
 
 fn find_nested_section(content: &str) -> (String, Option<String>) {
-    if let Some(pos) = content.find("\n---\n") {
-        let before_dash = &content[..pos];
-        let last_newline = before_dash.rfind('\n').unwrap_or(0);
-        let line_before = &before_dash[last_newline..];
+    content
+        .find("\n---\n")
+        .map(|pos| {
+            let before_dash = &content[..pos];
+            let last_newline = before_dash.rfind('\n').unwrap_or(0);
+            let line_before = &before_dash[last_newline..];
 
-        if !line_before.chars().all(|c| c.is_whitespace() || c == '\n') {
-            (content.trim().to_string(), None)
-        } else {
-            (
-                content[..pos].trim().to_string(),
-                Some(content[pos + 1..].to_string()),
-            )
-        }
-    } else {
-        (content.trim().to_string(), None)
-    }
+            let is_separator = line_before.chars().all(|c| c.is_whitespace() || c == '\n');
+
+            if is_separator {
+                (
+                    content[..pos].trim().to_string(),
+                    Some(content[pos + 1..].to_string()),
+                )
+            } else {
+                (content.trim().to_string(), None)
+            }
+        })
+        .unwrap_or_else(|| (content.trim().to_string(), None))
 }
 
 fn parse_nested_notes(children_str: &str, parent_id: &str) -> Result<Vec<Note>, String> {
     fn parse_recursive(content: &str, parent_id: &str) -> Result<Vec<Note>, String> {
-        if let Some(pos) = content.find("---\n") {
+        content.find("---\n").map_or(Ok(vec![]), |pos| {
             let child_section = &content[pos + 4..];
 
-            if let Some(end_pos) = child_section.find("\n---\n") {
-                let child_full = &child_section[..end_pos];
-                let child_content = format!("---\n{}---\n", child_full);
+            child_section.find("\n---\n").map_or_else(
+                || {
+                    parse_note_file(
+                        &format!("---\n{}---\n", child_section),
+                        Some(parent_id.to_string()),
+                    )
+                    .map(|child| vec![child])
+                    .or(Ok(vec![]))
+                },
+                |end_pos| {
+                    let child_content = format!("---\n{}---\n", &child_section[..end_pos]);
+                    let remaining = &child_section[end_pos..];
 
-                match parse_note_file(&child_content, Some(parent_id.to_string())) {
-                    Ok(child) => {
-                        let remaining = &child_section[end_pos..];
-                        let mut result = vec![child];
-                        result.extend(parse_recursive(remaining, parent_id)?);
-                        Ok(result)
-                    }
-                    Err(_e) => {
-                        // If there's an error parsing this child, continue with remaining
-                        parse_recursive(&child_section[end_pos..], parent_id)
-                    }
-                }
-            } else {
-                match parse_note_file(
-                    &format!("---\n{}---\n", child_section),
-                    Some(parent_id.to_string()),
-                ) {
-                    Ok(child) => Ok(vec![child]),
-                    Err(_) => Ok(vec![]),
-                }
-            }
-        } else {
-            Ok(vec![])
-        }
+                    parse_note_file(&child_content, Some(parent_id.to_string()))
+                        .and_then(|child| {
+                            parse_recursive(remaining, parent_id)
+                                .map(|rest| [vec![child], rest].concat())
+                        })
+                        .or_else(|_| parse_recursive(remaining, parent_id))
+                },
+            )
+        })
     }
 
     parse_recursive(children_str, parent_id)
@@ -210,16 +207,19 @@ fn compose_note(note: Note, content: String, children: Vec<Note>) -> Note {
 
 pub fn parse_note_file(content: &str, parent_id: Option<String>) -> Result<Note, String> {
     let (metadata, rest) = split_metadata_and_content(content)?;
-    let mut note = extract_fields(metadata)?;
-    note.parent_id = parent_id.or(note.parent_id);
+    let note = extract_fields(metadata)?;
+    let note_with_parent = Note {
+        parent_id: parent_id.or(note.parent_id),
+        ..note
+    };
 
     let (note_content, children_section) = find_nested_section(rest);
     let children = children_section
         .as_ref()
-        .and_then(|cs| parse_nested_notes(cs, &note.id).ok())
+        .and_then(|cs| parse_nested_notes(cs, &note_with_parent.id).ok())
         .unwrap_or_default();
 
-    Ok(compose_note(note, note_content, children))
+    Ok(compose_note(note_with_parent, note_content, children))
 }
 
 // I/O operations
