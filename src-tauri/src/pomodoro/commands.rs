@@ -111,6 +111,26 @@ fn next_state(state: &PomodoroState) -> PomodoroState {
     }
 }
 
+// fn next_state(state: &PomodoroState) -> PomodoroState {
+//     match (state.is_break, state.remaining) {
+//         (false, 0) => PomodoroState {
+//             work_duration: state.work_duration,
+//             break_duration: state.break_duration,
+//             is_break: true,
+//             remaining: state.break_duration,
+//             is_paused: false,
+//         },
+//         (true, 0) => PomodoroState {
+//             work_duration: state.work_duration,
+//             break_duration: state.break_duration,
+//             is_break: false,
+//             remaining: state.work_duration,
+//             is_paused: false,
+//         },
+//         _ => state.clone(),
+//     }
+// }
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> PomodoroState {
     let new_state = PomodoroState {
@@ -124,6 +144,7 @@ pub fn init_timer(work_min: u32, break_min: u32, state: State<TimerState>) -> Po
     *state.timer.lock().unwrap() = new_state.clone();
     new_state
 }
+
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn get_timer_state(state: State<TimerState>) -> PomodoroState {
@@ -143,6 +164,33 @@ pub fn start_work(state: State<TimerState>) -> PomodoroState {
 #[tauri::command(rename_all = "snake_case")]
 pub fn start_break(state: State<TimerState>) -> PomodoroState {
     modify_timer_state(&state, |s| start_break_timer(s.work_duration, s.break_duration))
+}
+
+
+#[tauri::command]
+pub fn start_work(state: State<TimerState>) -> PomodoroState {
+    modify_timer_state(&state, |s| {
+        PomodoroState {
+            work_duration: s.work_duration,
+            break_duration: s.break_duration,
+            is_break: false,
+            remaining: s.work_duration,
+            is_paused: false,
+        }
+    })
+}
+
+#[tauri::command]
+pub fn start_break(state: State<TimerState>) -> PomodoroState {
+    modify_timer_state(&state, |s| {
+        PomodoroState {
+            work_duration: s.work_duration,
+            break_duration: s.break_duration,
+            is_break: true,
+            remaining: s.break_duration,
+            is_paused: false,
+        }
+    })
 }
 
 #[tauri::command(rename_all = "snake_case")]
